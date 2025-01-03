@@ -141,7 +141,8 @@ esp_err_t wired_netif_init(void)
 
     const esp_netif_ip_info_t ip_cfg = {
             .ip = { .addr = ESP_IP4TOADDR( 192, 168, 4, 1) },
-            .gw = { .addr = ESP_IP4TOADDR( 192, 168, 4, 1) },
+            //.gw = { .addr = ESP_IP4TOADDR( 192, 168, 4, 1) },
+            .gw = { .addr = ESP_IP4TOADDR( 0, 0, 0, 0) },
             .netmask = { .addr = ESP_IP4TOADDR( 255, 255, 255, 0) },
     };
 
@@ -192,7 +193,7 @@ esp_err_t wired_netif_init(void)
      */
 
     // set the minimum lease time
-    uint32_t  lease_opt = 1;
+    uint32_t  lease_opt = 60;
     esp_netif_dhcps_option(s_netif, ESP_NETIF_OP_SET, IP_ADDRESS_LEASE_TIME, &lease_opt, sizeof(lease_opt));
 
 
