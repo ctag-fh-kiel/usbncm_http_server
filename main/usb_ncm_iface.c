@@ -102,6 +102,7 @@ static esp_err_t netif_recv_callback(void *buffer, uint16_t len, void *ctx)
     return ESP_OK;
 }
 
+
 /**
  *  In this scenario of configuring WiFi, we setup USB-Ethernet to create a virtual network and run DHCP server,
  *  so it could assign an IP address to the PC
@@ -198,13 +199,9 @@ esp_err_t wired_netif_init(void)
     uint32_t  lease_opt = 60;
     esp_netif_dhcps_option(s_netif, ESP_NETIF_OP_SET, IP_ADDRESS_LEASE_TIME, &lease_opt, sizeof(lease_opt));
 
-
-
     // start the interface manually (as the driver has been started already)
     esp_netif_action_start(s_netif, 0, 0, 0);
 
-
-    // delay until the interface is up
     vTaskDelay(pdMS_TO_TICKS(5000));
 
     esp_err_t err;
@@ -212,6 +209,12 @@ esp_err_t wired_netif_init(void)
     ESP_LOGI(TAG, "mdns_init returned %d", err);
     err = mdns_register_netif(s_netif);
     ESP_LOGI(TAG, "mdns_register_netif returned %d", err);
+    err = mdns_netif_action(s_netif, MDNS_EVENT_ENABLE_IP4 | MDNS_EVENT_ENABLE_IP6);
+    ESP_LOGI(TAG, "mdns_netif_action returned %d", err);
+    err = mdns_netif_action(s_netif, MDNS_EVENT_ANNOUNCE_IP4 | MDNS_EVENT_ANNOUNCE_IP6);
+    ESP_LOGI(TAG, "mdns_netif_action returned %d", err);
+    err = mdns_netif_action(s_netif, MDNS_EVENT_IP4_REVERSE_LOOKUP | MDNS_EVENT_IP6_REVERSE_LOOKUP);
+    ESP_LOGI(TAG, "mdns_netif_action returned %d", err);
     err = mdns_hostname_set("ctag-tbd");
     ESP_LOGI(TAG, "mdns_hostname_set returned %d", err);
     err = mdns_instance_name_set("ctag web server");
