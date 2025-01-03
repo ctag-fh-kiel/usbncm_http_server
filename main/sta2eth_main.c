@@ -57,26 +57,6 @@ void app_main(void){
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    esp_err_t err;
-    err = mdns_init();
-    ESP_LOGI(TAG, "mdns_init returned %d", err);
-    err = mdns_hostname_set("ctag-tbd");
-    ESP_LOGI(TAG, "mdns_hostname_set returned %d", err);
-    err = mdns_instance_name_set("ctag web server");
-    ESP_LOGI(TAG, "mdns_instance_name_set returned %d", err);
-
-    mdns_txt_item_t serviceTxtData[] = {
-            {"board", "esp32"},
-            {"path", "/"}
-    };
-
-    err = mdns_service_add("ctag-tbd", "_http", "_tcp", 80, serviceTxtData,
-                                     sizeof(serviceTxtData) / sizeof(serviceTxtData[0]));
-    ESP_LOGI(TAG, "mdns_service_add returned %d", err);
-
-    netbiosns_init();
-    netbiosns_set_name("ctag-tbd");
-
 
     // starts the wired interface with virtual network used to configure/provision the example
     wired_netif_init();

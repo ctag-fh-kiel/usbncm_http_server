@@ -8,6 +8,7 @@
  * This example contains code to make ESP32-S2/S3 as a USB network Device.
  */
 #include <stdio.h>
+#include <lwip/apps/netbiosns.h>
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_event.h"
@@ -21,6 +22,7 @@
 #include "esp_log.h"       // for logging
 #include "lwip/ip_addr.h"  // for IP address configuration
 #include "lwip/sys.h"
+#include "mdns.h"
 
 static const char *TAG = "example_wired_tusb_ncm";
 static esp_netif_t *s_netif = NULL;
@@ -197,7 +199,35 @@ esp_err_t wired_netif_init(void)
     esp_netif_dhcps_option(s_netif, ESP_NETIF_OP_SET, IP_ADDRESS_LEASE_TIME, &lease_opt, sizeof(lease_opt));
 
 
+
     // start the interface manually (as the driver has been started already)
     esp_netif_action_start(s_netif, 0, 0, 0);
+
+
+    // delay until the interface is up
+    vTaskDelay(pdMS_TO_TICKS(5000));
+
+    esp_err_t err;
+    err = mdns_init();
+    ESP_LOGI(TAG, "mdns_init returned %d", err);
+    err = mdns_register_netif(s_netif);
+    ESP_LOGI(TAG, "mdns_register_netif returned %d", err);
+    err = mdns_hostname_set("ctag-tbd");
+    ESP_LOGI(TAG, "mdns_hostname_set returned %d", err);
+    err = mdns_instance_name_set("ctag web server");
+    ESP_LOGI(TAG, "mdns_instance_name_set returned %d", err);
+
+    mdns_txt_item_t serviceTxtData[] = {
+            {"board", "esp32"},
+            {"path", "/"}
+    };
+
+    err = mdns_service_add("ctag-tbd", "_http", "_tcp", 80, serviceTxtData,
+                           sizeof(serviceTxtData) / sizeof(serviceTxtData[0]));
+    ESP_LOGI(TAG, "mdns_service_add returned %d", err);
+
+    netbiosns_init();
+    netbiosns_set_name("ctag-tbd");
+
     return ESP_OK;
 }
