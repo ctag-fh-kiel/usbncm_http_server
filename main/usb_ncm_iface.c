@@ -27,49 +27,60 @@
 static const char *TAG = "example_wired_tusb_ncm";
 static esp_netif_t *s_netif = NULL;
 
+// Interface counter
+enum interface_count {
+#if CFG_TUD_MIDI
+    ITF_NUM_MIDI = 0,
+    ITF_NUM_MIDI_STREAMING,
+#endif
+#if CFG_TUD_NCM
+    ITF_NUM_NET,
+    ITF_NUM_NET_DATA,
+#endif
+    ITF_COUNT
+};
+
+// USB Endpoint numbers
+enum usb_endpoints {
+    // Available USB Endpoints: 5 IN/OUT EPs and 1 IN EP
+    EP_EMPTY = 0,
+#if CFG_TUD_MIDI
+    EPNUM_MIDI,
+#endif
+#if CFG_TUD_NCM
+    EPNUM_NET_NOTIF,
+    EPNUM_NET_DATA,
+#endif
+};
+
+/** TinyUSB descriptors **/
+
+#define TUSB_DESCRIPTOR_TOTAL_LEN (TUD_CONFIG_DESC_LEN + CFG_TUD_MIDI * TUD_MIDI_DESC_LEN + CFG_TUD_NCM * TUD_CDC_NCM_DESC_LEN)
+
 /**
- *  In this scenario of WiFi station to Ethernet bridge mode, we have this configuration
- *
- *   (ISP) router        ESP32               PC
- *      [ AP ] <->   [ sta -- USB ] <->  [ USB-NCM device acting as eth-NIC ]
- *
- *  From the PC's NIC perspective the L2 forwarding should be transparent and resemble this configuration:
- *
- *   (ISP) router                           PC
- *      [ AP ]       <---------->       [ virtual wifi-NIC ]
- *
- *  In order for the ESP32 to act as L2 bridge it needs to accept the frames for the NCM device,
- *  which we have fully under control, we can modify it's MAC address, as well as the WiFi station
- *  MAC address, which need to be the same so the AP would see one device (virtual eth-NIC).
- *  No need to modify the ethernet frames here, as we can set the station's MAC to the USB NCM device.
+ * @brief String descriptor
  */
-void mac_spoof(mac_spoof_direction_t direction, uint8_t *buffer, uint16_t len, uint8_t own_mac[6])
-{
+static const char *s_str_desc[7] = {
+        // array of pointer to string descriptors
+        (char[]) {0x09, 0x04},  // 0: is supported language is English (0x0409)
+        "TBD",             // 1: Manufacturer
+        "TBD-BBA",      // 2: Product
+        "123456",              // 3: Serials, should use chip ID
+        "TBD midi device", // 4: MIDI
+        "TBD network device", // 5: NCM
+        "000000000000", // 6: MAC
+};
 
-}
+static const uint8_t s_midi_cfg_desc[] = {
+        // Configuration number, interface count, string index, total length, attribute, power in mA
+        TUD_CONFIG_DESCRIPTOR(1, ITF_COUNT, 0, TUSB_DESCRIPTOR_TOTAL_LEN, 0, 100),
 
-esp_err_t wired_bridge_init(wired_rx_cb_t rx_cb, wired_free_cb_t free_cb)
-{
-    const tinyusb_config_t tusb_cfg = {
-        .external_phy = false,
-    };
-    ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
+        // MIDI Interface number, string index, EP Out & EP In address, EP size
+        TUD_MIDI_DESCRIPTOR(ITF_NUM_MIDI, 4, EPNUM_MIDI, (0x80 | EPNUM_MIDI), 64),
 
-    tinyusb_net_config_t net_config = {
-        .on_recv_callback = rx_cb,
-        .free_tx_buffer = free_cb,
-    };
-
-    esp_read_mac(net_config.mac_addr, ESP_MAC_WIFI_STA);
-
-    esp_err_t ret = tinyusb_net_init(TINYUSB_USBDEV_0, &net_config);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "USB net init but not connect wifi");
-        return ret;
-    }
-    return ESP_OK;
-}
-
+        // NCM Interface number, description string index, MAC address string index, EP notification address and size, EP data address (out, in), and size, max segment size
+        TUD_CDC_NCM_DESCRIPTOR(ITF_NUM_NET, 5, 6, (0x80 | EPNUM_NET_NOTIF), 64, EPNUM_NET_DATA, (0x80 | EPNUM_NET_DATA), 64, CFG_TUD_NET_MTU),
+};
 
 esp_err_t wired_send(void *buffer, uint16_t len, void *buff_free_arg)
 {
@@ -102,28 +113,24 @@ static esp_err_t netif_recv_callback(void *buffer, uint16_t len, void *ctx)
     return ESP_OK;
 }
 
-
-/**
- *  In this scenario of configuring WiFi, we setup USB-Ethernet to create a virtual network and run DHCP server,
- *  so it could assign an IP address to the PC
- *
- *           ESP32               PC
- *      |    lwip MAC=...01   |                        eth NIC MAC=...02
- *      | <DHCP server>   usb | <->  [ USB-NCM device acting as eth-NIC ]
- *      | <HTTP server>       |
- *      | (wifi-provisioning) |
- *
- *  From the PC's NIC perspective the board acts as a separate network with it's own IP and MAC address,
- *  but the virtual ethernet NIC has also it's own IP and MAC address (configured via tinyusb_net_init()).
- *  That's why we need to create the virtual network with *different* MAC address.
- *  Here, we use two different OUI range MAC addresses.
- */
 esp_err_t wired_netif_init(void)
 {
-    const tinyusb_config_t tusb_cfg = {
+    /*const tinyusb_config_t tusb_cfg = {
         .external_phy = false,
     };
+     */
+
+    tinyusb_config_t const tusb_cfg = {
+            .device_descriptor = NULL, // If device_descriptor is NULL, tinyusb_driver_install() will use Kconfig
+            .string_descriptor = s_str_desc,
+            .string_descriptor_count = 7,
+            .external_phy = false,
+            .configuration_descriptor = s_midi_cfg_desc,
+            .self_powered = false,
+            .vbus_monitor_io = 0
+    };
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
+
 
     const tinyusb_net_config_t net_config = {
         // locally administrated address for the ncm device as it's going to be used internally
